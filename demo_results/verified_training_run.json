@@ -1,0 +1,39 @@
+{
+  "config": {
+    "board_size": 9,
+    "win_length": 5,
+    "num_channels": 8,
+    "num_res_blocks": 1,
+    "value_hidden_size": 64,
+    "num_simulations": 8,
+    "sim_batch": 4,
+    "c_puct": 1.5,
+    "dirichlet_alpha": 0.3,
+    "dirichlet_epsilon": 0.25,
+    "virtual_loss": 3.0,
+    "temperature_moves": 12,
+    "games_per_iteration": 2,
+    "parallel_games": 2,
+    "buffer_size": 512,
+    "batch_size": 8,
+    "learning_rate": 0.001,
+    "weight_decay": 0.0001,
+    "train_steps_per_iteration": 2,
+    "lr_milestones": [
+      150,
+      300
+    ],
+    "grad_clip_norm": 5.0,
+    "value_loss_weight": 0.5,
+    "arena_games": 2,
+    "arena_win_rate_threshold": 0.55,
+    "arena_num_simulations": 4,
+    "arena_opening_moves": 4,
+    "checkpoint_dir": "checkpoints/verified-final",
+    "total_iterations": 2,
+    "seed": 42
+  },
+  "device": "cpu",
+  "torch": "2.14.1+cpu",
+  "numpy": "2.5.4"
+}

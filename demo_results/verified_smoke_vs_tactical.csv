@@ -1,0 +1,5 @@
+game,az_color,winner,moves,az_seconds,az_turns,seed,simulations,board_size,opponent,checkpoint
+1,black,tactical,10,0.1341,5,42,8,9,tactical,checkpoints\web-smoke\latest.pt
+2,white,tactical,15,0.0879,7,42,8,9,tactical,checkpoints\web-smoke\latest.pt
+3,black,tactical,10,0.0286,5,42,8,9,tactical,checkpoints\web-smoke\latest.pt
+4,white,tactical,15,0.0242,7,42,8,9,tactical,checkpoints\web-smoke\latest.pt

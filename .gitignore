@@ -9,5 +9,7 @@ pytest-cache-files-*/
 node_modules/
 dist/
 test-results/
+test-results-pages/
 playwright-report/
 checkpoints/
+*.tsbuildinfo

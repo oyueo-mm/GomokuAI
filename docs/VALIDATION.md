@@ -1,0 +1,72 @@
+# 검증 기록 · 2026-10-22
+
+## 복구
+
+최초 폴더에는 `.git`, `alphazero/`, 원본 테스트·노트북이 없었고 복구용 웹 파일만 있었다. 최초 로컬 테스트 25개 통과 후 GitHub `master` (`20e5e1c`)의 이력·누락 파일을 복구했다. 기존 로컬 파일을 덮어쓰지 않았으며 원본 복제본은 `.upstream-recovery/`에 남겨 Git에서 제외했다. 기존 체크포인트·학습 데이터는 발견되지 않았다.
+
+수정한 핵심 오류:
+
+- 배치 MCTS가 같은 리프를 다시 확장하면서 자식 통계를 초기화할 수 있어 중복 확장을 막았다.
+- 재개에 RNG·설정이 없어 재현되지 않던 문제를 수정했다. 새 원자적 스냅샷은 모델·최고 모델·옵티마이저·버퍼·RNG를 함께 보존한다. 보조 내보내기 손상 후 재개도 검사했다.
+- 웹 전술 점수의 같은 방향 중첩 패턴을 이중 위협으로 세던 오류를 수정했다.
+- 탐색 예산·보드 입력·확률 설정, 기보·모델 해시·모델 보드 크기 검사를 추가했다. 기존 복구 파일의 잘못된 착수·Gymnasium 종국 방지 수정도 보존했다.
+
+## 자동 검사
+
+| 검사 | 로컬 결과 |
+|---|---|
+| pytest | 67 통과. 기존 matplotlib 미렌더 애니메이션 경고 1개 |
+| Vitest | 43 통과 |
+| Python ↔ TS | 28대국, 2,212개 수순별 보드·차례·종국·승자 일치 |
+| Playwright | 7 통과: 게임·취소·실제 터치·Arena·그래프·모델·6종 완전 대국 |
+| Pages 하위 경로 | 1 통과: 실제 production JS/Worker/WASM, 외부 요청 없음 |
+| TypeScript / Vite build | 통과, `dist/` 생성 |
+| PyTorch ↔ ONNX Runtime | 배치 1/3, 최대 절대 오차 약 6.71e-8 |
+| PyTorch ↔ 브라우저 WASM | 합법 수 정책·가치 오차 1e-5 이내 |
+| 학습 재개 | CPU 2회 연속 실행과 1회 후 재개 가중치 비트 단위 일치 |
+
+즉시 승리·필수 방어는 Heuristic/Minimax/Alpha-Beta/MCTS에서 검사했다. 열린 4목·이중 위협은 전술 평가 함수를 검사했다. Minimax와 Alpha-Beta의 완료 깊이 2/3 결과 일치 및 깊이 3 가지치기를 검사했다. Random과 학습 초기 AlphaZero에 전술 보장이나 강한 기력을 주장하지 않는다.
+
+## 실제 측정
+
+환경: Windows, Node 24.19, Python 3.12.10, torch 2.14.1+cpu, 로컬 Edge headless. 브라우저 하드웨어는 에뮬레이션하지 않았고 모바일은 터치·뷰포트를 에뮬레이션했다. 저사양 실기기·Safari·Firefox는 미검증이다.
+
+`demo_results/verified_browser_arena.json`:
+
+- 9×9, seed 42, 깊이 1 / 후보 8 / 최대 32 시뮬레이션 / 150ms, 알고리즘당 Random 상대 2대국, 선후공 교대.
+- Random은 1승 1패, 나머지 다섯 알고리즘은 각 2승. AlphaZero는 1회 학습한 **스모크 후보**를 실제 ONNX로 추론했다. 이 작은 표본은 기력 순위를 입증하지 않는다.
+- 마지막 측정의 대국별 평균 사고 시간: Heuristic 약 0.4–0.5ms, Minimax 약 2.3–2.6ms, Alpha-Beta 약 1.7–1.8ms, MCTS 약 87–97ms, AlphaZero 약 2.9–3.7ms. Random은 타이머 해상도에 가까운 값이다. 모델·예산·장치가 다르면 달라진다.
+- 마지막 메인 스레드 10ms 타이머의 최대 관측 간격은 약 50ms. 앞선 별도 실행은 약 11.5ms였다. 이 값은 UI 프레임률 보장이 아닌 해당 실행의 응답성 측정이다.
+- 노드 정의는 서로 다르다. Minimax는 평가 재귀 노드, MCTS는 선택/롤아웃 처리, AlphaZero는 신경망 기반 시뮬레이션이다. 노드 수만으로 탐색 품질을 비교하면 안 된다.
+
+`demo_results/verified_final_smoke_vs_tactical.csv`:
+
+- 9×9, seed 42, MCTS 8회/수, 선후공 교대 4대국.
+- 2회 스모크 학습 후보가 Python Tactical에 **0승 4패**. 학습 손실 감소와 모델 기력 향상은 같은 주장이 아니다.
+- 체크포인트 SHA-256과 학습 횟수를 CSV에 기록했다. `verified_smoke_vs_tactical.csv`는 그 이전 1회 학습 후보 결과다. 원래 제공된 CSV는 이번 검증 결과로 간주하지 않는다.
+
+`demo_results/verified_inference_cpu.json`:
+
+- 9×9 / 16채널 / 1블록, 임의 초기 가중치로 추론 처리량만 측정했다. 게임용 학습 모델로 사용하지 않았다.
+- CPU 1스레드, 워밍업 3회 후 20회. 배치 1/8/32의 평균 배치 지연은 약 0.279/0.431/0.916ms. 해당 장치에서 배치 처리 경로가 작동함을 확인한 결과다.
+
+## 재현
+
+```sh
+python -m pip install -r requirements-export.txt
+python -m pytest tests -q
+python -m scripts.generate_parity
+python -m scripts.train_smoke_web
+python -m scripts.export_model --checkpoint checkpoints/web-smoke/latest.pt --output checkpoints/web-smoke/gomoku9-smoke.onnx
+npm ci
+npm test
+npm run build
+npm run test:e2e
+npm run test:pages
+```
+
+스모크 디렉터리와 내보내기 파일이 이미 있으면 새 경로를 사용한다. 전체 모델 E2E는 기본 `checkpoints/web-smoke/gomoku9-smoke` 파일을 사용하며, 미생성 상태는 명시적으로 skip한다. 로컬 생성 체크포인트·모델은 Git에서 제외하고 보존했다.
+
+브라우저 재측정은 `test-results/benchmark.json`에 쓰므로 버전 관리한 측정 스냅샷을 덮어쓰지 않는다. 실제 손실 로그와 실행 설정 사본은 `demo_results/verified_training_log.csv`, `verified_training_run.json`에 보존했다.
+
+남은 검증은 Colab GPU 실행·성능, 충분한 학습 후 다중 시드·다양한 상대 평가, 저사양 모바일 실기기다. GitHub Actions/Pages 설정 파일은 준비했으며 원격 CI 실행·공개 배포는 하지 않았다.

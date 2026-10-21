@@ -14,6 +14,7 @@ test('worker responds, cancellation does not apply stale move',async({page})=>{
   await page.getByLabel('대국 방식').selectOption('ai-ai');await page.getByRole('button',{name:'일시정지'}).click();await page.getByRole('button',{name:'새 대국'}).click();await page.getByRole('button',{name:'일시정지'}).click();
   const count=await page.locator('.stone').count();await page.waitForTimeout(500);await expect(page.locator('.stone')).toHaveCount(count);expect(errors).toEqual([]);
 });
-test('mobile board is playable without horizontal overflow',async({page})=>{
-  await page.setViewportSize({width:390,height:844});await page.goto('/');await page.getByLabel('대국 방식').selectOption('human-human');await page.getByRole('gridcell',{name:'8행 8열',exact:true}).tap({force:true}).catch(()=>page.getByRole('gridcell',{name:'8행 8열',exact:true}).click());await expect(page.locator('.stone')).toHaveCount(1);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:'test-results/mobile.png',fullPage:true});
+test('mobile board is playable without horizontal overflow',async({browser})=>{
+  const context=await browser.newContext({viewport:{width:390,height:844},hasTouch:true,isMobile:true});const page=await context.newPage();
+  await page.goto('http://127.0.0.1:5173/');await page.getByLabel('대국 방식').selectOption('human-human');await page.getByRole('gridcell',{name:'8행 8열',exact:true}).tap();await expect(page.locator('.stone')).toHaveCount(1);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:'test-results/mobile.png',fullPage:true});await context.close();
 });

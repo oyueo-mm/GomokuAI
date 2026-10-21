@@ -1,0 +1,5 @@
+game,az_color,winner,moves,az_seconds,az_turns,seed,simulations,board_size,opponent,checkpoint,checkpoint_sha256,trained_iterations
+1,black,tactical,12,0.013,6,42,8,9,tactical,checkpoints\verified-final\latest.pt,af6439e1e43619cd74ce63dfd57a066afb2c9adb3b8e6ed1a6a92da38c4434c1,2
+2,white,tactical,15,0.0123,7,42,8,9,tactical,checkpoints\verified-final\latest.pt,af6439e1e43619cd74ce63dfd57a066afb2c9adb3b8e6ed1a6a92da38c4434c1,2
+3,black,tactical,12,0.0146,6,42,8,9,tactical,checkpoints\verified-final\latest.pt,af6439e1e43619cd74ce63dfd57a066afb2c9adb3b8e6ed1a6a92da38c4434c1,2
+4,white,tactical,15,0.0129,7,42,8,9,tactical,checkpoints\verified-final\latest.pt,af6439e1e43619cd74ce63dfd57a066afb2c9adb3b8e6ed1a6a92da38c4434c1,2

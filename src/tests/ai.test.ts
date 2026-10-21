@@ -17,3 +17,7 @@ it('minimax and alpha-beta agree at completed depth',async()=>{
   const g=Game.replay(9,[40,41,30,50]);const cfg={...budget,timeMs:10000,width:5};const m=await decide(g,'minimax',cfg),a=await decide(g,'alphabeta',cfg);expect(a.depth).toBe(2);expect(a.action).toBe(m.action);expect(a.candidates.map(c=>[c.action,c.score])).toEqual(m.candidates.map(c=>[c.action,c.score]));
 });
 it('random is seeded, legal; absent AlphaZero fails clearly',async()=>{const g=new Game(9);expect((await decide(g,'random',budget)).action).toBe((await decide(g,'random',budget)).action);await expect(decide(g,'alphazero',budget)).rejects.toThrow('모델');});
+it('alpha-beta prunes while preserving the minimax result at depth 3',async()=>{
+  const g=Game.replay(9,[40,41,30,50]);const cfg={...budget,depth:3,timeMs:10000,width:4};const m=await decide(g,'minimax',cfg),a=await decide(g,'alphabeta',cfg);
+  expect(a.depth).toBe(3);expect(a.action).toBe(m.action);expect(a.candidates[0].score).toBe(m.candidates[0].score);expect(a.cutoffs).toBeGreaterThan(0);expect(a.nodes).toBeLessThan(m.nodes);
+});

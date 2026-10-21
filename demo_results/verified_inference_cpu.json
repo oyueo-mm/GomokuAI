@@ -1,0 +1,30 @@
+{
+  "device": "cpu",
+  "cuda_available": false,
+  "torch": "2.14.1+cpu",
+  "seed": 42,
+  "network": {
+    "board_size": 9,
+    "channels": 16,
+    "blocks": 1
+  },
+  "weights": "random: throughput benchmark only, not a game model",
+  "repeats": 20,
+  "rows": [
+    {
+      "batch_size": 1,
+      "mean_batch_ms": 0.27884499868378043,
+      "positions_per_second": 3586.2217530178245
+    },
+    {
+      "batch_size": 8,
+      "mean_batch_ms": 0.43099500180687755,
+      "positions_per_second": 18561.700173926103
+    },
+    {
+      "batch_size": 32,
+      "mean_batch_ms": 0.9163250011624768,
+      "positions_per_second": 34922.10728661104
+    }
+  ]
+}

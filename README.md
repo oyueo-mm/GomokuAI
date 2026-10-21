@@ -1,146 +1,68 @@
-# GomokuAI
+﻿# GomokuAI · 오목 연구실
 
-*[한국어](#한국어) | [English](#english)*
+Python 기준 엔진·Gymnasium·PyTorch AlphaZero를 유지하고, **외부 서버 없이 실행되는 React + TypeScript + Vite 웹게임**을 연결했다. 작업 브랜치는 `revival/web-ai-lab`이다. master 병합·원격 push·공개 배포는 하지 않았다.
 
-<a id="한국어"></a>
-## 한국어
+## 웹 실행
 
-오목(오목, five-in-a-row) 게임 엔진과 Gymnasium 환경, 그리고 PyTorch로 구현한
-AlphaZero 방식의 셀프플레이 학습 파이프라인입니다.
+Node 24 기준:
 
-### 구성
-
-- `gomoku_env/` — 게임 로직(`game.py`), Gymnasium 호환 환경(`env.py`),
-  신경망 입력용 보드 인코딩(`encoding.py`), 보드 렌더러(`visualize.py`).
-- `alphazero/` — 학습 파이프라인: MCTS(`mcts.py`), 정책/가치 네트워크
-  (`model.py`), 셀프플레이 데이터 생성(`self_play.py`), 리플레이 버퍼
-  (`replay_buffer.py`), 학습 루프(`train.py`), 후보-최고 모델 평가
-  (`arena.py`), 전체를 총괄하는 파이프라인(`pipeline.py`).
-- `scripts/play_random.py` — 랜덤 정책끼리 한 판을 플레이해 환경을 빠르게
-  점검하는 스모크 테스트.
-- `notebooks/colab_train.ipynb` — Colab에서 학습 루프를 실행하는 노트북.
-- `tests/` — 게임, 환경, MCTS, 모델, 셀프플레이, 리플레이 버퍼, 아레나,
-  파이프라인을 다루는 pytest 테스트 스위트.
-
-### 설치
-
-```bash
-pip install -r requirements.txt
-pip install -e .
+```sh
+npm ci
+npm run dev
 ```
 
-Python 3.9 이상이 필요합니다.
+표시되는 `http://127.0.0.1:5173`에 접속한다. Python 서버는 필요 없다.
 
-### 사용법
+- 9×9 / 13×13 / 15×15 자유형 오목. 5개 이상 연결 승리. 렌주 금수 미지원.
+- 사람 vs AI / AI vs AI / 사람 vs 사람, 색상·선후공, 난이도, 일시정지, 무르기, 재시작, 기보 JSON 저장·검증된 불러오기.
+- 마지막 착수·수순·승리선, 반응형 터치 UI. AI 연산은 Web Worker에서 실행하며 취소 시 이전 응답을 폐기한다.
+- Random / Heuristic / Minimax / Alpha-Beta / MCTS / **실제 ONNX 정책·가치망 + PUCT AlphaZero**.
+- 모델 없는 AlphaZero는 비활성화한다. 스모크 모델은 기력 미검증 상태로 표시한다.
+- 후보 점수·히트맵·방문 비율, 깊이·가지치기·노드·사고 시간. Arena는 선후공 교대, 색상별 득점률·평균 시간/노드, 실제 결과 JSON/CSV 내보내기를 제공한다.
+- 학습 CSV를 불러와 정책/가치 손실과 승급 평가 득점률을 그린다. 가상 통계는 표시하지 않는다.
 
-랜덤 정책 대결로 환경이 정상 동작하는지 확인:
+| 예산 | 깊이 / 후보 폭 | 최대 시뮬레이션 | 시간 / 수 |
+|---|---|---|---|
+| 가볍게 | 1 / 8 | 32 | 150ms |
+| 표준 | 2 / 10 | 128 | 600ms |
+| 깊게 | 3 / 12 | 512 | 1800ms |
 
-```bash
-python scripts/play_random.py --board-size 9
+알고리즘마다 적용 항목이 다르다. Minimax/Alpha-Beta는 반복 깊이 탐색과 리프 평가 캐시를 사용한다. MCTS는 후보 제한 UCT, 최대 12수 롤아웃 후 휴리스틱 가치를 사용한다. AlphaZero는 전체 합법 수에 모델 정책/가치를 적용하는 PUCT다. 브라우저 AlphaZero는 순차 추론이며 GPU 배치 셀프플레이는 Python 경로에서 지원한다. 실시간 탐색은 루트 후보 갱신을 표시하며 전체 탐색 트리 애니메이션은 제공하지 않는다.
+
+## Python과 학습
+
+```sh
+python -m pip install -r requirements-export.txt
+python -m pytest tests -q
+python -m scripts.train_smoke_web
+python -m scripts.export_model --checkpoint checkpoints/web-smoke/latest.pt --output checkpoints/web-smoke/gomoku9-smoke.onnx
 ```
 
-테스트 실행:
+웹 **학습 분석**에서 ONNX와 같은 이름의 JSON을 함께 선택한다. 보드 크기가 일치하면 AlphaZero를 선택할 수 있다. 기존 출력이 있으면 새 경로를 사용한다. 체크포인트는 `checkpoints/`에 보존하며 Git에서 제외한다. [VS Code + Colab GPU 준비·재개·내보내기](docs/TRAINING.md)를 참고한다. GPU 장시간 학습은 시작하지 않았다.
 
-```bash
-pytest
+## 검증과 실제 결과
+
+```sh
+python -m scripts.generate_parity
+npm test
+npm run build
+npm run test:e2e
+npm run test:pages
 ```
 
-AlphaZero 셀프플레이 학습 실행 (보드 크기, MCTS 시뮬레이션 수, 네트워크
-크기, 아레나 승급 기준 등 모든 하이퍼파라미터는 `alphazero/config.py` 참고):
+Windows Playwright는 설치된 Edge를 사용한다. Linux CI는 Chromium을 설치해 사용한다. 모델 E2E를 포함하려면 위 스모크·내보내기를 먼저 실행한다. 모델이 없으면 해당 검사는 명시적으로 skip된다. Python 임시 폴더 권한 문제가 있으면 접근 가능한 별도 `--basetemp`를 지정한다.
 
-```python
-from alphazero.config import AlphaZeroConfig
-from alphazero.pipeline import run_training_loop
+Python 기준 **28대국 / 2,212개 수순별 상태**와 TS 엔진이 일치한다. 전술 승리·필수 방어·열린 4목·이중 위협, 학습 타깃·마스킹·D4 증강·가치 부호·Virtual Loss·체크포인트 재개를 검사한다. 측정 조건과 결과는 [검증 기록](docs/VALIDATION.md)에 있다.
 
-run_training_loop(AlphaZeroConfig())
+브라우저 비교는 각 알고리즘당 Random 상대 선후공 2대국만 측정했다. **이 표본으로 기력 순위를 판단할 수 없다.** 2회짜리 CPU 스모크 AlphaZero 후보는 Python 전술 AI와 4대국에서 0승이었다. 고성능 모델로 홍보하지 않는다. 기존 `demo_results`와 이번 `verified_*` 결과를 구분한다.
+
+## GitHub Pages
+
+```sh
+npm run build
+npm run preview
 ```
 
-매 반복(iteration)마다 학습 체크포인트(`latest.pt`, `best.pt`, `buffer.npz`,
-`log.csv`)가 `checkpoint_dir`에 저장되므로, 학습이 중단되어도 이어서 재개할
-수 있습니다 (Colab 환경에서 이어서 실행하는 예시는
-`notebooks/colab_train.ipynb` 참고).
+산출물은 `dist/`이며 상대 자산 경로를 사용한다. `/GomokuAI/` 하위 경로에서 Worker·WASM까지 실제 브라우저로 검사했다. `.github/workflows/pages.yml`은 **수동 실행 전용**이다. 승인 후 브랜치를 원격에 올리고 Settings → Pages → GitHub Actions를 설정한 다음 직접 실행한다. 이번 작업에서는 실행하지 않았다. CI 정의도 추가했지만 원격 Actions 실행은 아직 하지 않았다.
 
-### 동작 방식
-
-- 환경의 관측(observation)은 항상 "다음에 둘 플레이어" 시점으로 주어집니다
-  (자신의 돌 / 상대의 돌 / 선공 여부를 나타내는 평면), 그래서 하나의
-  네트워크가 셀프플레이에서 양쪽을 모두 플레이할 수 있습니다.
-- 셀프플레이의 매 수는 현재 최고 성능 네트워크가 안내하는 MCTS로
-  결정되며, GPU 효율을 위해 리프 노드 평가를 배치로 묶어 처리합니다.
-- 매 반복이 끝나면 학습된 후보 모델이 현재 최고 모델과 아레나 매치를
-  치르고, `arena_win_rate_threshold` 이상의 승률을 거둬야만 "최고 모델"로
-  승급됩니다.
-
----
-
-<a id="english"></a>
-## English
-
-Gomoku (five-in-a-row) game engine, a Gymnasium environment, and an
-AlphaZero-style self-play training pipeline built on PyTorch.
-
-### Layout
-
-- `gomoku_env/` — game logic (`game.py`), a Gymnasium-compatible env
-  (`env.py`), board encoding for the neural net (`encoding.py`), and a
-  board renderer (`visualize.py`).
-- `alphazero/` — the training pipeline: MCTS (`mcts.py`), the policy/value
-  network (`model.py`), self-play example generation (`self_play.py`), a
-  replay buffer (`replay_buffer.py`), the training loop (`train.py`),
-  candidate-vs-best evaluation (`arena.py`), and the top-level orchestrator
-  (`pipeline.py`).
-- `scripts/play_random.py` — smoke test: two random policies play a full
-  game and print the result.
-- `notebooks/colab_train.ipynb` — runs the training loop on Colab.
-- `tests/` — pytest suite covering the game, env, MCTS, model, self-play,
-  replay buffer, arena, and pipeline.
-
-### Setup
-
-```bash
-pip install -r requirements.txt
-pip install -e .
-```
-
-Requires Python >= 3.9.
-
-### Usage
-
-Play a random-vs-random game to sanity-check the environment:
-
-```bash
-python scripts/play_random.py --board-size 9
-```
-
-Run the test suite:
-
-```bash
-pytest
-```
-
-Run AlphaZero self-play training (see `alphazero/config.py` for all
-hyperparameters — board size, MCTS simulations, network size, arena
-promotion threshold, etc.):
-
-```python
-from alphazero.config import AlphaZeroConfig
-from alphazero.pipeline import run_training_loop
-
-run_training_loop(AlphaZeroConfig())
-```
-
-Training checkpoints (`latest.pt`, `best.pt`, `buffer.npz`, `log.csv`) are
-written to `checkpoint_dir` after every iteration, so a run can resume
-where it left off (see `notebooks/colab_train.ipynb` for a Colab-friendly
-version of this loop).
-
-### How it works
-
-- The environment observation is always from the perspective of the player
-  about to move (own stones / opponent stones / a "who moved first" plane),
-  so a single network plays both sides during self-play.
-- Each self-play move runs MCTS guided by the current best network,
-  batching leaf evaluations for GPU efficiency.
-- After each iteration, a training checkpoint plays an arena match against
-  the current best network; it's only promoted to "best" if it wins at or
-  above `arena_win_rate_threshold`.
+기존 Python HTTP 웹은 `python -m scripts.web_server`로 실행하며 `web/`에 보존했다. 새 정적 웹 진입점은 루트 `index.html`, `src/`다. [구조](docs/ARCHITECTURE.md)를 참고한다.
