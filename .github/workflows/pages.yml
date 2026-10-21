@@ -1,6 +1,8 @@
-name: Publish GitHub Pages (manual only)
+name: Publish GitHub Pages
 on:
   workflow_dispatch:
+  push:
+    branches: [revival/web-ai-lab]
 permissions:
   contents: read
 concurrency:
