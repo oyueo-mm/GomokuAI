@@ -69,7 +69,7 @@ npm run test:pages
 
 브라우저 재측정은 `test-results/benchmark.json`에 쓰므로 버전 관리한 측정 스냅샷을 덮어쓰지 않는다. 실제 손실 로그와 실행 설정 사본은 `demo_results/verified_training_log.csv`, `verified_training_run.json`에 보존했다.
 
-남은 검증은 Colab GPU 실행·성능, 충분한 학습 후 다중 시드·다양한 상대 평가, 저사양 모바일 실기기다. GitHub Actions/Pages 설정 파일은 준비했으며 원격 CI 실행·공개 배포는 하지 않았다.
+남은 검증은 Colab GPU 실행·성능, 충분한 학습 후 다중 시드·다양한 상대 평가, 저사양 모바일 실기기다. GitHub Pages 배포와 CI 현황은 README의 GitHub Pages 절을 따른다.
 
 ## 후속 개선 · 2026-10-22 (revival/web-ai-lab)
 
@@ -104,3 +104,7 @@ npm run test:pages
 ### 검사 결과
 
 pytest 69, Vitest 49(위협 점수 동일성·워커 복구·전술·결정성·시뮬레이션 예산 추가), Playwright 8(360px 폰의 15×15 탭 테스트 추가) 통과. GPU 학습은 실행하지 않았다. 파이프라인·체크포인트·기존 학습 결과는 변경하지 않았다. 저사양 실기기·Safari·Firefox는 여전히 미검증이다.
+
+### 디자인·히트맵 (master 병합 전)
+
+배경 `#FFFFFF`, 흑·백·회색만 쓰는 평면 디자인으로 교체했다(녹색 테마·그라데이션·그림자 제거). 오목판은 연회색 단색 + 1px 격자(바깥 줄은 끝 돌의 중심에서 종료), 흑돌은 검정 단색, 백돌은 흰색 + 검정 테두리다. 후보 히트맵은 기본 꺼짐이며 켰을 때만 회색 링과 `#순위` 라벨(착수 번호와 혼동되지 않게 구분)을 표시한다. Playwright가 흰 배경, 그림자·그라데이션 없음, 유채색 없음, 히트맵 기본 꺼짐·토글, 360px 폭 탭별 가로 넘침 없음과 터치 크기를 검사한다.

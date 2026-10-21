@@ -2,7 +2,7 @@ name: Publish GitHub Pages
 on:
   workflow_dispatch:
   push:
-    branches: [revival/web-ai-lab]
+    branches: [master]
 permissions:
   contents: read
 concurrency:

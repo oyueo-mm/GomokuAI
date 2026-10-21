@@ -27,3 +27,21 @@ test('15x15 board on a 360px phone: every cell is tappable and nothing overflows
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
   await context.close();
 });
+test('flat white monochrome design; candidate heatmap is opt-in',async({page})=>{
+  await page.goto('/');await page.getByLabel('보드 크기').selectOption('9');
+  expect(await page.evaluate(()=>getComputedStyle(document.body).backgroundColor)).toBe('rgb(255, 255, 255)');
+  expect(await page.evaluate(()=>getComputedStyle(document.documentElement).backgroundColor)).toBe('rgb(255, 255, 255)');
+  await page.getByRole('gridcell',{name:'5행 5열',exact:true}).click();await expect(page.locator('.stone')).toHaveCount(2);await expect(page.getByText('Heuristic · 가지치기 0회')).toBeVisible();
+  const heatbox=page.getByRole('checkbox',{name:'후보 히트맵'});await expect(heatbox).not.toBeChecked();await expect(page.locator('.heat')).toHaveCount(0);
+  await heatbox.check();await expect(page.locator('.heat').first()).toBeVisible();await heatbox.uncheck();await expect(page.locator('.heat')).toHaveCount(0);
+  // Stones and board: solid fills, no gradients or drop shadows; no chromatic (green) colors anywhere on the page.
+  const flat=await page.evaluate(()=>[...document.querySelectorAll('.stone,.board,.board-panel,.card,button')].every(e=>{const s=getComputedStyle(e);return s.boxShadow==='none'&&!s.backgroundImage.includes('gradient');}));expect(flat).toBe(true);
+  const chromatic=await page.evaluate(()=>[...document.querySelectorAll('body *')].filter(e=>{const s=getComputedStyle(e);return [s.color,s.backgroundColor,s.borderTopColor].some(c=>{const m=c.match(/\d+(\.\d+)?/g);if(!m||(m[3]!==undefined&&+m[3]===0))return false;const [r,g,b]=m.map(Number);return Math.max(r,g,b)-Math.min(r,g,b)>8;});}).map(e=>e.className));expect(chromatic).toEqual([]);
+});
+test('mobile layout: no horizontal overflow on every tab and controls are touch-sized',async({browser})=>{
+  const context=await browser.newContext({viewport:{width:360,height:740},hasTouch:true,isMobile:true});const page=await context.newPage();await page.goto('http://127.0.0.1:5173/');
+  for(const tab of ['대국실','AI Arena','학습 분석']){await page.getByRole('button',{name:tab}).click();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);}
+  await page.getByRole('button',{name:'대국실'}).click();
+  const small=await page.evaluate(()=>[...document.querySelectorAll('.toolbar button,.toolbar .file-button,select,nav button')].filter(e=>e.getBoundingClientRect().height<38).map(e=>e.textContent));expect(small).toEqual([]);
+  await context.close();
+});

@@ -1,6 +1,6 @@
 ﻿# GomokuAI · 오목 연구실
 
-Python 기준 엔진·Gymnasium·PyTorch AlphaZero를 유지하고, **외부 서버 없이 실행되는 React + TypeScript + Vite 웹게임**을 연결했다. 작업 브랜치는 `revival/web-ai-lab`이다. master 병합·원격 push·공개 배포는 하지 않았다.
+Python 기준 엔진·Gymnasium·PyTorch AlphaZero를 유지하고, **외부 서버 없이 실행되는 React + TypeScript + Vite 웹게임**을 연결했다. 개발은 `revival/web-ai-lab`에서 진행했고 `master`에 병합했다. 공개 사이트는 `master`에서만 배포된다.
 
 ## 웹 실행
 
@@ -18,7 +18,7 @@ npm run dev
 - 마지막 착수·수순·승리선, 반응형 터치 UI. AI 연산은 Web Worker에서 실행하며 취소 시 이전 응답을 폐기한다.
 - Random / Heuristic / Minimax / Alpha-Beta / MCTS / **실제 ONNX 정책·가치망 + PUCT AlphaZero**.
 - 모델 없는 AlphaZero는 비활성화한다. 스모크 모델은 기력 미검증 상태로 표시한다.
-- 후보 점수·히트맵·방문 비율, 깊이·가지치기·노드·사고 시간. Arena는 선후공 교대, 색상별 득점률·평균 시간/노드, 실제 결과 JSON/CSV 내보내기를 제공한다.
+- 후보 점수·방문 비율(후보 히트맵은 기본 꺼짐, 직접 켤 때만 표시), 깊이·가지치기·노드·사고 시간. Arena는 선후공 교대, 색상별 득점률·평균 시간/노드, 실제 결과 JSON/CSV 내보내기를 제공한다.
 - 학습 CSV를 불러와 정책/가치 손실과 승급 평가 득점률을 그린다. 가상 통계는 표시하지 않는다.
 
 | 예산 | 깊이 / 후보 폭 | 최대 시뮬레이션 | 시간 / 수 |
@@ -63,6 +63,6 @@ npm run build
 npm run preview
 ```
 
-산출물은 `dist/`이며 상대 자산 경로를 사용한다. `/GomokuAI/` 하위 경로에서 Worker·WASM까지 실제 브라우저로 검사했다. `.github/workflows/pages.yml`은 **수동 실행 전용**이다. 승인 후 브랜치를 원격에 올리고 Settings → Pages → GitHub Actions를 설정한 다음 직접 실행한다. 이번 작업에서는 실행하지 않았다. CI 정의도 추가했지만 원격 Actions 실행은 아직 하지 않았다.
+산출물은 `dist/`이며 상대 자산 경로를 사용한다. `/GomokuAI/` 하위 경로에서 Worker·WASM까지 실제 브라우저로 검사했다. `.github/workflows/pages.yml`은 `master`에 push할 때(또는 수동 실행)만 배포한다. 다른 브랜치 push는 공개 사이트를 바꾸지 않는다. Settings → Pages의 소스는 GitHub Actions이며 배포 환경 `github-pages`는 `master`만 허용한다. 공개 주소: https://oyueo-mm.github.io/GomokuAI/ . `ci.yml`은 PR·`master` push·수동 실행에서 Python·Vitest·Playwright·빌드를 검증한다.
 
 기존 Python HTTP 웹은 `python -m scripts.web_server`로 실행하며 `web/`에 보존했다. 새 정적 웹 진입점은 루트 `index.html`, `src/`다. [구조](docs/ARCHITECTURE.md)를 참고한다.
