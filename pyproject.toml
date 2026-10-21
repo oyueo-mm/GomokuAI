@@ -15,3 +15,7 @@ dependencies = [
 
 [tool.setuptools]
 packages = ["gomoku_env", "alphazero"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-p no:cacheprovider"

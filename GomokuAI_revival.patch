@@ -1,0 +1,382 @@
+diff --git a/gomoku_env/game.py b/gomoku_env/game.py
+--- a/gomoku_env/game.py
++++ b/gomoku_env/game.py
+@@ -46,14 +46,18 @@
+         return (self.board == 0).reshape(-1)
+ 
+     def is_valid_move(self, action: int) -> bool:
+-        row, col = divmod(action, self.board_size)
+-        return self.board[row, col] == 0
++        if isinstance(action, (bool, np.bool_)) or not isinstance(action, (int, np.integer)):
++            return False
++        if action < 0 or action >= self.board_size * self.board_size:
++            return False
++        row, col = divmod(int(action), self.board_size)
++        return bool(self.board[row, col] == 0)
+ 
+     def step(self, action: int) -> StepResult:
+         if self.done:
+             raise InvalidMoveError("Game already finished; call reset().")
+         if not self.is_valid_move(action):
+-            raise InvalidMoveError(f"Cell {action} is already occupied.")
++            raise InvalidMoveError(f"Action {action} is out of bounds or its cell is occupied.")
+ 
+         row, col = divmod(action, self.board_size)
+         player = self.current_player
+diff --git a/gomoku_env/env.py b/gomoku_env/env.py
+--- a/gomoku_env/env.py
++++ b/gomoku_env/env.py
+@@ -42,6 +42,7 @@
+         self.game = GomokuGame(board_size=board_size, win_length=win_length)
+         self.board_size = board_size
+         self.render_mode = render_mode
++        self._episode_terminated = False
+ 
+         n_cells = board_size * board_size
+         self.action_space = spaces.Discrete(n_cells)
+@@ -59,6 +60,7 @@
+     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
+         super().reset(seed=seed)
+         self.game.reset()
++        self._episode_terminated = False
+         obs = self._obs()
+         info = {"action_mask": self.action_masks()}
+         if self.render_mode == "human":
+@@ -66,13 +68,17 @@
+         return obs, info
+ 
+     def step(self, action: int):
++        if self._episode_terminated:
++            raise RuntimeError("Episode finished; call reset() before stepping again.")
+         if not self.game.is_valid_move(action):
++            self._episode_terminated = True
+             obs = self._obs()
+             info = {"action_mask": self.action_masks(), "invalid_move": True}
+             return obs, -1.0, True, False, info
+ 
+         mover = self.game.current_player
+         result = self.game.step(action)
++        self._episode_terminated = result.done
+ 
+         if result.done:
+             reward = 0.0 if result.winner is None else (1.0 if result.winner == mover else -1.0)
+diff --git a/gomoku_env/agents.py b/gomoku_env/agents.py
+new file mode 100644
+--- /dev/null
++++ b/gomoku_env/agents.py
+@@ -0,0 +1,94 @@
++"""Deterministic tactical baseline for freestyle Gomoku.
++
++This agent is a non-neural reference opponent.  It wins in one move when
++possible, blocks an opponent win in one move, then ranks local threats.
++"""
++from __future__ import annotations
++
++import numpy as np
++
++from .game import GomokuGame
++
++DIRECTIONS = ((1, 0), (0, 1), (1, 1), (1, -1))
++
++
++def _run_and_ends(board: np.ndarray, row: int, col: int, player: int, dr: int, dc: int) -> tuple[int, int]:
++    size = board.shape[0]
++    count = 1
++    open_ends = 0
++    for sign in (1, -1):
++        r, c = row + sign * dr, col + sign * dc
++        while 0 <= r < size and 0 <= c < size and board[r, c] == player:
++            count += 1
++            r += sign * dr
++            c += sign * dc
++        if 0 <= r < size and 0 <= c < size and board[r, c] == 0:
++            open_ends += 1
++    return count, open_ends
++
++
++def _would_win(board: np.ndarray, row: int, col: int, player: int, win_length: int) -> bool:
++    return any(_run_and_ends(board, row, col, player, dr, dc)[0] >= win_length for dr, dc in DIRECTIONS)
++
++
++def _threat_score(board: np.ndarray, row: int, col: int, player: int, win_length: int) -> float:
++    score = 0.0
++    for dr, dc in DIRECTIONS:
++        count, open_ends = _run_and_ends(board, row, col, player, dr, dc)
++        remaining = win_length - count
++        if remaining <= 0:
++            score += 1_000_000
++        elif remaining == 1:
++            score += 25_000 if open_ends == 2 else 4_000 if open_ends == 1 else 0
++        elif remaining == 2:
++            score += 1_000 if open_ends == 2 else 100 if open_ends == 1 else 0
++        elif remaining == 3:
++            score += 50 if open_ends == 2 else 8 if open_ends == 1 else 0
++        else:
++            score += count if open_ends else 0
++    return score
++
++
++def choose_move(game: GomokuGame) -> int:
++    """Return a legal flattened action for the side to move (no model required)."""
++    if game.done:
++        raise ValueError("Cannot choose a move after the game has ended.")
++    board = game.board
++    size = game.board_size
++    stones = np.argwhere(board != 0)
++    if len(stones) == 0:
++        center = size // 2
++        return center * size + center
++
++    # Limit ordinary evaluation to cells near existing stones while retaining
++    # a deterministic choice in corner cases and on small boards.
++    neighbors: set[tuple[int, int]] = set()
++    for row, col in stones:
++        for dr in range(-2, 3):
++            for dc in range(-2, 3):
++                r, c = int(row) + dr, int(col) + dc
++                if 0 <= r < size and 0 <= c < size and board[r, c] == 0:
++                    neighbors.add((r, c))
++    if not neighbors:
++        neighbors = {tuple(map(int, p)) for p in np.argwhere(board == 0)}
++    if not neighbors:
++        raise ValueError("No legal moves remain.")
++
++    candidates = sorted(neighbors)
++    player = game.current_player
++    opponent = -player
++    center = (size - 1) / 2
++    priority = lambda p: ((p[0] - center) ** 2 + (p[1] - center) ** 2, p[0], p[1])
++
++    wins = [p for p in candidates if _would_win(board, p[0], p[1], player, game.win_length)]
++    if wins:
++        row, col = min(wins, key=priority)
++        return row * size + col
++
++    blocks = [p for p in candidates if _would_win(board, p[0], p[1], opponent, game.win_length)]
++    if blocks:
++        row, col = min(blocks, key=lambda p: (-_threat_score(board, *p, player, game.win_length), *priority(p)))
++        return row * size + col
++
++    row, col = max(candidates, key=lambda p: (_threat_score(board, *p, player, game.win_length) + 1.1 * _threat_score(board, *p, opponent, game.win_length), -priority(p)[0], -p[0], -p[1]))
++    return row * size + col
+diff --git a/scripts/play_human.py b/scripts/play_human.py
+new file mode 100644
+--- /dev/null
++++ b/scripts/play_human.py
+@@ -0,0 +1,61 @@
++"""Play freestyle Gomoku against a deterministic tactical baseline."""
++from __future__ import annotations
++
++import argparse
++
++from gomoku_env.agents import choose_move
++from gomoku_env.game import BLACK, WHITE, GomokuGame, InvalidMoveError
++
++
++def main() -> None:
++    parser = argparse.ArgumentParser(description="Play Gomoku against a tactical baseline AI.")
++    parser.add_argument("--board-size", type=int, default=9)
++    parser.add_argument("--win-length", type=int, default=5)
++    parser.add_argument("--human-color", choices=("black", "white"), default="black")
++    args = parser.parse_args()
++    if args.board_size < 1 or args.win_length < 1:
++        parser.error("board-size and win-length must be positive integers")
++
++    game = GomokuGame(board_size=args.board_size, win_length=args.win_length)
++    human_player = BLACK if args.human_color == "black" else WHITE
++    print("Freestyle Gomoku: X = Black, O = White. Enter 'row col' (zero-indexed), or q to quit.")
++
++    while not game.done:
++        print("\n" + game.render())
++        if game.current_player == human_player:
++            try:
++                raw = input("Your move (row col): ").strip()
++            except (EOFError, KeyboardInterrupt):
++                print("\nGame interrupted.")
++                return
++            if raw.lower() in ("q", "quit", "exit"):
++                print("Goodbye!")
++                return
++            try:
++                row, col = map(int, raw.replace(",", " ").split())
++                if not (0 <= row < game.board_size and 0 <= col < game.board_size):
++                    raise ValueError
++                action = row * game.board_size + col
++            except ValueError:
++                print("Enter two coordinates within the board, e.g. '4 4'.")
++                continue
++        else:
++            action = choose_move(game)
++            row, col = divmod(action, game.board_size)
++            print(f"AI plays: {row} {col}")
++        try:
++            game.step(action)
++        except InvalidMoveError as exc:
++            print(f"Illegal move: {exc}")
++
++    print("\n" + game.render())
++    if game.winner is None:
++        print("Draw!")
++    elif game.winner == human_player:
++        print("You win!")
++    else:
++        print("AI wins!")
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/tests/test_agents.py b/tests/test_agents.py
+new file mode 100644
+--- /dev/null
++++ b/tests/test_agents.py
+@@ -0,0 +1,46 @@
++from gomoku_env.game import GomokuGame, InvalidMoveError
++from gomoku_env.agents import choose_move
++import pytest
++
++
++def test_center_opening():
++    assert choose_move(GomokuGame(9, 5)) == 40
++
++
++def test_win_immediately():
++    game = GomokuGame(9, 5)
++    for move in [0, 9, 1, 10, 2, 11, 3, 30]:
++        game.step(move)
++    assert choose_move(game) == 4
++
++
++def test_block_immediate_threat():
++    game = GomokuGame(9, 5)
++    for move in [0, 36, 2, 37, 5, 38, 7, 39]:
++        game.step(move)
++    assert choose_move(game) == 40
++
++
++def test_legal_midgame_move():
++    game = GomokuGame(9, 5)
++    for move in [40, 30, 41, 31]:
++        game.step(move)
++    assert game.is_valid_move(choose_move(game))
++
++
++def test_no_move_after_finished():
++    game = GomokuGame(5, 3)
++    for move in [0, 5, 1, 6, 2]:
++        game.step(move)
++    with pytest.raises(ValueError):
++        choose_move(game)
++
++
++def test_invalid_coordinates_are_rejected():
++    game = GomokuGame(9, 5)
++    for action in [-1, 81, 100, 1.5, True]:
++        assert not game.is_valid_move(action)
++        with pytest.raises(InvalidMoveError):
++            game.step(action)
++    assert game.move_count == 0
++    assert game.board.sum() == 0
+diff --git a/tests/test_invalid_moves.py b/tests/test_invalid_moves.py
+new file mode 100644
+--- /dev/null
++++ b/tests/test_invalid_moves.py
+@@ -0,0 +1,50 @@
++"""Regression tests for action bounds and episode termination."""
++
++import numpy as np
++import pytest
++
++from gomoku_env.game import GomokuGame, InvalidMoveError
++
++
++@pytest.mark.parametrize("action", [-1, -9, 81, 120, 1.5, True, np.int64(-1)])
++def test_invalid_actions_do_not_change_board(action):
++    game = GomokuGame(board_size=9, win_length=5)
++    before = game.board.copy()
++    assert not game.is_valid_move(action)
++    with pytest.raises(InvalidMoveError):
++        game.step(action)
++    assert np.array_equal(game.board, before)
++    assert game.move_count == 0
++
++
++def test_numpy_integer_is_supported():
++    game = GomokuGame(board_size=9, win_length=5)
++    game.step(np.int64(40))
++    assert game.board[4, 4] == 1
++
++
++def test_illegal_env_action_terminates_until_reset():
++    pytest.importorskip("gymnasium")
++    from gomoku_env.env import GomokuEnv
++    env = GomokuEnv(board_size=9, win_length=5)
++    env.reset()
++    _, reward, done, _, info = env.step(-1)
++    assert (reward, done, info["invalid_move"]) == (-1.0, True, True)
++    assert env.game.move_count == 0
++    with pytest.raises(RuntimeError):
++        env.step(0)
++    env.reset()
++    _, reward, done, _, info = env.step(0)
++    assert not done and reward == 0.0
++
++
++def test_env_cannot_step_after_winner():
++    pytest.importorskip("gymnasium")
++    from gomoku_env.env import GomokuEnv
++    env = GomokuEnv(board_size=9, win_length=5)
++    env.reset()
++    for action in [0, 9, 1, 10, 2, 11, 3, 12, 4]:
++        _, _, done, _, _ = env.step(action)
++    assert done
++    with pytest.raises(RuntimeError):
++        env.step(50)
+diff --git a/REVIVAL_README.md b/REVIVAL_README.md
+new file mode 100644
+--- /dev/null
++++ b/REVIVAL_README.md
+@@ -0,0 +1,44 @@
++# GomokuAI revival — playable baseline (첫 복구 단계)
++
++기존 `master` 브랜치의 AlphaZero 학습 코드는 그대로 두고, **게임 엔진 검증, 기본 전술 AI, 터미널에서 대국**할 수 있는 기능을 추가하는 패치입니다.
++
++## 적용
++
++기존 프로젝트를 로컬에 클론한 뒤 저장소 루트에서 실행하세요.
++
++```bash
++git switch -c revival/playable-baseline
++git apply --check GomokuAI_revival.patch
++git apply GomokuAI_revival.patch
++pip install -r requirements.txt
++pip install -e .
++pytest -q
++python -m scripts.play_human --board-size 9 --human-color black
++```
++
++패치 파일을 저장소 루트에 복사한 뒤 `git apply`를 실행하세요. Python 소스 파일을 직접 복사하여 덮어써도 되지만, `git apply`를 사용하면 기존 파일과의 변경 사항을 검증할 수 있습니다.
++
++사람은 `row col`을 입력합니다. 좌표는 0부터 시작합니다. 예: `4 4`. `--human-color white`를 사용하면 AI가 흑돌을 먼저 둡니다. `q`를 입력하면 게임을 종료합니다. 기본 규칙은 **자유형 오목**이며 렌주 금수 규칙은 적용되지 않습니다.
++
++## 이번 단계 내용
++
++- 게임 좌표가 음수, 범위 초과, 실수, 불리언인 경우 유효하지 않은 착수로 판정합니다.
++- Gymnasium 환경이 잘못된 수로 종료되었거나 승부가 끝난 뒤 추가 착수를 막습니다.
++- 비신경망 기본 AI가 즉시 승리할 수 있는 수를 두거나, 상대의 즉시 승리 수를 차단합니다.
++- 그 외에는 주변 후보의 공격·방어 패턴을 점수화해 착수합니다.
++- 회귀 테스트를 추가합니다.
++
++## 한계
++
++- 이 AI는 **AlphaZero의 학습된 정책이 아닙니다**. GPU와 학습 모델 없이 기본 기능을 시험하는 전술형 베이스라인입니다.
++- 승률과 기력은 아직 측정하지 않았으며, 위협 점수만으로 강한 기력을 보장하지 않습니다.
++- 전체 기존 테스트는 `gymnasium`과 전체 프로젝트를 설치한 환경에서 확인해야 합니다.
++- 현재 제공하는 패치는 GitHub의 `master` 커밋 `20e5e1c62d4645fc901fab6aca537e008b3d3b97`에 맞춰 생성했습니다.
++
++## 이후 로드맵
++
++1. 기존 MCTS의 선택·확장·역전파, 즉시 승리 및 차단 기능의 정합성 테스트
++2. 휴리스틱 AI, 랜덤 AI, 정책·가치망 등과의 대국 평가 및 선후공 교차 검증
++3. 셀프플레이 시뮬레이션 중복 제어, 추론 배치 최적화, 재현 가능한 체크포인트
++4. VS Code ↔ Colab GPU 학습 루프와 실력 추이 평가
++5. 웹 오목판과 AI 선택 UI, 정책 확률 및 MCTS 시각화

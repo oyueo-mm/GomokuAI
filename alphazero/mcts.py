@@ -156,7 +156,9 @@ class MCTSTree:
     def expand_and_backup(self, path: List[Node], leaf_game: GomokuGame, priors: np.ndarray, value: float):
         leaf = path[-1]
         is_root = len(path) == 1
-        if not leaf_game.done:
+        # Several in-flight simulations may select the same unexpanded leaf.
+        # Expanding twice would erase the first simulation's child statistics.
+        if not leaf_game.done and not leaf.expanded:
             leaf.expand(leaf_game.valid_moves_mask(), priors)
             if is_root and self.add_root_noise:
                 leaf.add_dirichlet_noise(
@@ -189,7 +191,9 @@ class MCTSTree:
         if temperature <= 1e-3:
             chosen = int(actions[int(np.argmax(visits))])
         else:
-            weighted = visits ** (1.0 / temperature)
+            weighted = (visits / max(float(visits.max()), 1.0)) ** (1.0 / temperature)
+            if weighted.sum() == 0:
+                weighted = self.root._priors.copy()
             weighted = weighted / weighted.sum()
             chosen = int(self.rng.choice(actions, p=weighted))
         return chosen, policy

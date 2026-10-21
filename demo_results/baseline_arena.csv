@@ -1,0 +1,5 @@
+game,a_color,winner,moves,a_moves,b_moves,a_seconds,b_seconds,a_nodes,b_nodes,total_seconds
+1,black,a,13,7,6,0.00391,0.00024,7,6,0.0043
+2,white,a,12,6,6,0.00393,0.00012,6,6,0.0041
+3,black,a,9,5,4,0.00223,8e-05,5,4,0.0024
+4,white,a,10,5,5,0.00279,7e-05,5,5,0.0029

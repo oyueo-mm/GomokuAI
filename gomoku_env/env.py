@@ -42,6 +42,7 @@ class GomokuEnv(gym.Env):
         self.game = GomokuGame(board_size=board_size, win_length=win_length)
         self.board_size = board_size
         self.render_mode = render_mode
+        self._episode_terminated = False
 
         n_cells = board_size * board_size
         self.action_space = spaces.Discrete(n_cells)
@@ -59,6 +60,7 @@ class GomokuEnv(gym.Env):
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         super().reset(seed=seed)
         self.game.reset()
+        self._episode_terminated = False
         obs = self._obs()
         info = {"action_mask": self.action_masks()}
         if self.render_mode == "human":
@@ -66,13 +68,17 @@ class GomokuEnv(gym.Env):
         return obs, info
 
     def step(self, action: int):
+        if self._episode_terminated:
+            raise RuntimeError("Episode finished; call reset() before stepping again.")
         if not self.game.is_valid_move(action):
+            self._episode_terminated = True
             obs = self._obs()
             info = {"action_mask": self.action_masks(), "invalid_move": True}
             return obs, -1.0, True, False, info
 
         mover = self.game.current_player
         result = self.game.step(action)
+        self._episode_terminated = result.done
 
         if result.done:
             reward = 0.0 if result.winner is None else (1.0 if result.winner == mover else -1.0)

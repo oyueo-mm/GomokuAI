@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+from dataclasses import asdict
 import csv
 import time
 from pathlib import Path
@@ -54,6 +55,7 @@ def run_training_loop(config: AlphaZeroConfig, resume: bool = True):
     checkpoint_dir = Path(config.checkpoint_dir)
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
     rng = np.random.default_rng(config.seed)
+    torch.manual_seed(config.seed)
 
     model = GomokuNet(config).to(device)
     best_model = GomokuNet(config).to(device)
@@ -67,14 +69,25 @@ def run_training_loop(config: AlphaZeroConfig, resume: bool = True):
 
     if resume and latest_path.exists():
         checkpoint = torch.load(latest_path, map_location=device)
+        saved_config = checkpoint.get("config", {})
+        for key in ("board_size", "win_length", "num_channels", "num_res_blocks", "value_hidden_size"):
+            if key in saved_config and saved_config[key] != getattr(config, key):
+                raise ValueError(f"Resume configuration mismatch: {key}")
         model.load_state_dict(checkpoint["model_state"])
         optimizer.load_state_dict(checkpoint["optimizer_state"])
         start_iteration = checkpoint["iteration"] + 1
         best_model.load_state_dict(torch.load(best_path, map_location=device))
         if buffer_path.exists():
             buffer.load(str(buffer_path))
+        if "numpy_rng" in checkpoint:
+            rng.bit_generator.state = checkpoint["numpy_rng"]
+            torch.set_rng_state(checkpoint["torch_rng"].cpu())
+            if torch.cuda.is_available() and checkpoint.get("cuda_rng") is not None:
+                torch.cuda.set_rng_state_all(checkpoint["cuda_rng"])
         print(f"Resumed from iteration {start_iteration} ({len(buffer)} buffered examples).")
     else:
+        if latest_path.exists() or best_path.exists():
+            raise FileExistsError("Use a fresh checkpoint directory or resume=True")
         best_model.load_state_dict(model.state_dict())
         torch.save(model.state_dict(), best_path)
         print("Starting fresh run.")
@@ -105,6 +118,10 @@ def run_training_loop(config: AlphaZeroConfig, resume: bool = True):
                 "iteration": iteration,
                 "model_state": model.state_dict(),
                 "optimizer_state": optimizer.state_dict(),
+                "config": asdict(config),
+                "numpy_rng": rng.bit_generator.state,
+                "torch_rng": torch.get_rng_state(),
+                "cuda_rng": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
             },
             latest_path,
         )
