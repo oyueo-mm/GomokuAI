@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0c121e">
+  <title>GomokuAI · 오목 AI 실험실</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar"><div class="brand"><div class="logo">五</div><div><strong>Gomoku<span>AI</span></strong><small>PLAY & RESEARCH LAB</small></div></div><span class="version">REVIVAL · 0.2</span></header>
+  <main class="layout">
+    <section class="game-area">
+      <div class="heading"><div><p class="eyebrow">GAME ENGINE · FREESTYLE</p><h1>오목을 두고,<br><em>AI를 분석하다.</em></h1></div><div class="pill" id="connection">연결 확인 중</div></div>
+      <div class="game-card">
+        <div class="board-top"><div><span class="dot black"></span><span id="blackName">흑 · 사람</span><span class="vs">VS</span><span class="dot white"></span><span id="whiteName">백 · AI</span></div><span id="moveCount">0수 진행</span></div>
+        <div class="board-container"><canvas id="board" aria-label="클릭하여 돌을 놓는 오목판" role="img"></canvas></div>
+        <div class="board-bottom"><div class="turn" id="status" aria-live="polite">새 대국을 시작하세요.</div><div id="aiTime">AI 연산: —</div></div>
+      </div>
+      <div class="legend"><span><i class="pin self"></i>내 돌</span><span><i class="pin opponent"></i>AI 돌</span><span><i class="ring"></i>마지막 착수</span><span>자유형 오목 · 5개 이상 연속 시 승리</span></div>
+    </section>
+    <aside class="right-area">
+      <section class="panel setup"><div class="panel-heading"><h2>대국 설정</h2><span>01 / PLAY</span></div>
+        <label>대국 알고리즘<select id="algorithm"><option value="tactical">Tactical · 전술 휴리스틱</option><option value="alphabeta">Alpha-Beta · 탐색</option><option value="random">Random · 무작위 기준</option></select></label>
+        <div class="two-col"><label>바둑판 크기<select id="boardSize"><option value="9">9 × 9</option><option value="13">13 × 13</option><option value="15">15 × 15</option></select></label><label>내 돌 색상<select id="humanColor"><option value="1">흑 · 선공</option><option value="-1">백 · 후공</option></select></label></div>
+        <label id="depthField" class="hidden">Alpha-Beta 탐색 깊이<select id="depth"><option value="1">Depth 1 · 빠름</option><option value="2" selected>Depth 2 · 표준</option><option value="3">Depth 3 · 느림</option></select></label>
+        <button class="primary" id="newGame">새 대국 시작 <span>↗</span></button>
+      </section>
+      <section class="panel analysis"><div class="panel-heading"><h2>탐색 분석</h2><span>02 / ANALYSIS</span></div>
+        <p class="hint">후보 수의 전술적 위협 점수를 확인합니다. 이 값은 학습된 AlphaZero의 정책 확률이 아닙니다.</p>
+        <label class="checkline"><input id="showHeatmap" type="checkbox"><span>판 위에 후보 수 표시</span></label>
+        <div id="candidates" class="candidates"><div class="placeholder">대국을 시작하면 다음 착수 후보가 표시됩니다.</div></div>
+        <div class="metric-row"><div><small>최근 AI 탐색 노드</small><strong id="nodes">—</strong></div><div><small>AI 계산 시간</small><strong id="duration">—</strong></div></div>
+      </section>
+      <section class="panel record"><div class="panel-heading"><h2>착수 기록</h2><span>03 / REPLAY</span></div><div class="moves" id="history"><span class="placeholder">아직 착수 기록이 없습니다.</span></div></section>
+      <section class="panel research"><div class="panel-heading"><h2>AI 연구 트랙</h2><span>04 / RESEARCH</span></div><div class="research-item"><span class="badge ready">READY</span><div><strong>Baseline Arena</strong><small>Random / Tactical / Alpha-Beta 대국 및 CSV 결과</small></div></div><div class="research-item"><span class="badge progress">NEXT</span><div><strong>AlphaZero Training</strong><small>기존 PyTorch 셀프플레이 코드 검증·연동 예정</small></div></div><p class="hint">학습된 모델이 없는 상태를 학습 완료로 표시하지 않습니다.</p></section>
+    </aside>
+  </main>
+  <footer>GomokuAI — Python rules engine · local research prototype · no renju forbidden rules</footer>
+  <script src="/app.js" defer></script>
+</body>
+</html>

@@ -29,6 +29,10 @@ class GomokuGame:
     """
 
     def __init__(self, board_size: int = 15, win_length: int = 5):
+        if isinstance(board_size, bool) or not isinstance(board_size, int) or board_size < 1:
+            raise ValueError("board_size must be a positive integer")
+        if isinstance(win_length, bool) or not isinstance(win_length, int) or win_length < 1:
+            raise ValueError("win_length must be a positive integer")
         self.board_size = board_size
         self.win_length = win_length
         self.reset()
@@ -46,14 +50,18 @@ class GomokuGame:
         return (self.board == 0).reshape(-1)
 
     def is_valid_move(self, action: int) -> bool:
-        row, col = divmod(action, self.board_size)
-        return self.board[row, col] == 0
+        if isinstance(action, (bool, np.bool_)) or not isinstance(action, (int, np.integer)):
+            return False
+        if action < 0 or action >= self.board_size * self.board_size:
+            return False
+        row, col = divmod(int(action), self.board_size)
+        return bool(self.board[row, col] == 0)
 
     def step(self, action: int) -> StepResult:
         if self.done:
             raise InvalidMoveError("Game already finished; call reset().")
         if not self.is_valid_move(action):
-            raise InvalidMoveError(f"Cell {action} is already occupied.")
+            raise InvalidMoveError(f"Action {action} is out of bounds or its cell is occupied.")
 
         row, col = divmod(action, self.board_size)
         player = self.current_player

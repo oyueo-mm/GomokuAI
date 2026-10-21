@@ -51,6 +51,19 @@ class AlphaZeroConfig:
     total_iterations: int = 200
     seed: int = 0
 
+    def __post_init__(self):
+        for name in ("board_size", "win_length", "num_simulations", "sim_batch", "games_per_iteration", "parallel_games", "buffer_size", "batch_size", "train_steps_per_iteration", "arena_games", "arena_num_simulations"):
+            if getattr(self, name) < 1:
+                raise ValueError(f"{name} must be positive")
+        if self.win_length > self.board_size:
+            raise ValueError("win_length exceeds board_size")
+        if self.arena_games % 2:
+            raise ValueError("arena_games must be even for alternating colors")
+        if self.virtual_loss < 0 or self.c_puct <= 0 or self.dirichlet_alpha <= 0:
+            raise ValueError("Invalid PUCT/virtual-loss/noise settings")
+        if not 0 <= self.dirichlet_epsilon <= 1 or not 0 <= self.arena_win_rate_threshold <= 1:
+            raise ValueError("Probability settings must be in [0, 1]")
+
     @property
     def action_size(self) -> int:
         return self.board_size * self.board_size

@@ -1,0 +1,36 @@
+name: Verify engine and web lab
+on:
+  pull_request:
+  push:
+    branches: [master]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      OMP_NUM_THREADS: '1'
+      MKL_NUM_THREADS: '1'
+      MPLBACKEND: Agg
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-export.txt
+      - run: python -m pytest tests -q
+      - run: python -m scripts.generate_parity
+      - run: git diff --exit-code -- src/tests/parity.json
+      - run: python -m scripts.train_smoke_web
+      - run: python -m scripts.export_model --checkpoint checkpoints/web-smoke/latest.pt --output checkpoints/web-smoke/gomoku9-smoke.onnx
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+      - run: npm run build
+      - run: npm run test:e2e
+      - run: npm run test:pages

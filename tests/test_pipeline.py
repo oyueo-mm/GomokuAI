@@ -1,3 +1,5 @@
+import pytest
+
 from alphazero.config import AlphaZeroConfig
 from alphazero.pipeline import run_training_loop
 
@@ -47,3 +49,39 @@ def test_pipeline_resumes_from_checkpoint(tmp_path):
     checkpoint_dir = tmp_path / "checkpoints"
     log_lines = (checkpoint_dir / "log.csv").read_text().strip().splitlines()
     assert len(log_lines) == 3  # header + iteration 0 + iteration 1, not restarted from scratch
+
+
+def test_lr_decay_applies_in_the_milestone_iteration(tmp_path):
+    import torch
+    from alphazero import pipeline
+
+    seen = []
+    original = pipeline.train_steps
+
+    def spy(model, optimizer, *args, **kwargs):
+        seen.append(optimizer.param_groups[0]["lr"])
+        return original(model, optimizer, *args, **kwargs)
+
+    config = make_tiny_config(tmp_path / "checkpoints")
+    config.total_iterations = 3
+    config.lr_milestones = (1, 2)
+    pipeline.train_steps = spy
+    try:
+        run_training_loop(config, resume=False)
+    finally:
+        pipeline.train_steps = original
+    base = config.learning_rate
+    assert seen == pytest.approx([base, base * 0.1, base * 0.01])
+
+
+def test_export_and_evaluation_default_to_gated_best_weights():
+    import pytest
+    from alphazero.checkpoint import select_weights
+
+    snapshot = {"model_state": {"w": 1}, "best_model_state": {"w": 2}}
+    assert select_weights(snapshot) == ({"w": 2}, "best_model_state")
+    assert select_weights(snapshot, "candidate") == ({"w": 1}, "model_state")
+    assert select_weights({"w": 3}) == ({"w": 3}, "weights")
+    assert select_weights({"model_state": {"w": 1}}) == ({"w": 1}, "model_state")
+    with pytest.raises(ValueError):
+        select_weights(snapshot, "latest")
