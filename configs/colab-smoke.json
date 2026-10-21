@@ -1,0 +1,7 @@
+{
+  "board_size":9,"win_length":5,"num_channels":16,"num_res_blocks":1,
+  "num_simulations":8,"sim_batch":4,"games_per_iteration":2,"parallel_games":2,
+  "buffer_size":512,"batch_size":8,"train_steps_per_iteration":2,
+  "arena_games":2,"arena_num_simulations":4,"total_iterations":1,
+  "checkpoint_dir":"checkpoints/colab-smoke","seed":42
+}

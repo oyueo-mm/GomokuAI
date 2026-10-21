@@ -45,15 +45,18 @@ class ReplayBuffer:
 
     def save(self, path: str):
         Path(path).parent.mkdir(parents=True, exist_ok=True)
-        np.savez_compressed(
-            path,
-            states=np.stack(self.states) if self.states else np.empty((0,)),
-            policies=np.stack(self.policies) if self.policies else np.empty((0,)),
-            values=np.array(self.values, dtype=np.float32),
-        )
+        temporary = Path(path).with_suffix('.tmp.npz')
+        np.savez_compressed(temporary, **self.state_dict())
+        temporary.replace(path)
 
-    def load(self, path: str):
-        data = np.load(path)
+    def state_dict(self):
+        return dict(states=np.stack(self.states) if self.states else np.empty((0,)), policies=np.stack(self.policies) if self.policies else np.empty((0,)), values=np.array(self.values, dtype=np.float32))
+
+    def load_state_dict(self, data):
         self.states = deque(data["states"], maxlen=self.capacity)
         self.policies = deque(data["policies"], maxlen=self.capacity)
         self.values = deque(data["values"], maxlen=self.capacity)
+
+    def load(self, path: str):
+        with np.load(path) as data:
+            self.load_state_dict(data)

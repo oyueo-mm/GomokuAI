@@ -21,16 +21,20 @@ class NetEvaluator:
         self._torch = torch
         self.model = model.to(device)
         self.device = device
+        self.batches = 0
+        self.positions = 0
 
     def evaluate_batch(self, states: List[np.ndarray]):
         torch = self._torch
         batch = torch.from_numpy(np.stack(states)).float().to(self.device)
+        self.batches += 1
+        self.positions += len(states)
         policy_probs, value = self.model.predict(batch)
         return policy_probs.cpu().numpy(), value.cpu().numpy()
 
 
 class DummyEvaluator:
-    """Uniform-policy, zero-value evaluator. Used to unit-test MCTS without torch."""
+    """Uniform-policy, seeded random-value evaluator for tests, never a trained model."""
 
     def __init__(self, action_size: int, rng: np.random.Generator | None = None):
         self.action_size = action_size

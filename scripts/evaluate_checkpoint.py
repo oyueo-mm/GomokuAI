@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 from pathlib import Path
 from time import perf_counter
 
@@ -42,10 +43,14 @@ def main():
     except ImportError as exc:
         raise SystemExit("Requires the original alphazero/ package and PyTorch") from exc
     config = AlphaZeroConfig(board_size=args.size, win_length=args.win_length, num_channels=args.channels, num_res_blocks=args.blocks, num_simulations=args.sims, sim_batch=min(args.sims, 4))
-    model = GomokuNet(config)
     # Only load checkpoints from the user's own trusted training runs.
     state = torch.load(args.checkpoint, map_location="cpu", weights_only=True)
-    model.load_state_dict(state)
+    checkpoint_hash = hashlib.sha256(args.checkpoint.read_bytes()).hexdigest()
+    if 'config' in state:
+        config = AlphaZeroConfig(**{**state['config'], 'num_simulations': args.sims, 'sim_batch':min(args.sims,4)})
+        args.size, args.win_length = config.board_size, config.win_length
+    model = GomokuNet(config)
+    model.load_state_dict(state.get('model_state',state))
     evaluator = NetEvaluator(model, device="cuda" if torch.cuda.is_available() else "cpu")
     rng = np.random.default_rng(args.seed)
     records = []
@@ -68,7 +73,7 @@ def main():
                 raise RuntimeError(f"Illegal move: {action}")
             game.step(action)
         outcome = "draw" if game.winner is None else ("alphazero" if game.winner == az_color else args.opponent)
-        records.append({"game": game_index + 1, "az_color": "black" if az_color == BLACK else "white", "winner": outcome, "moves": game.move_count, "az_seconds": round(az_seconds, 4), "az_turns": az_turns})
+        records.append({"game": game_index + 1, "az_color": "black" if az_color == BLACK else "white", "winner": outcome, "moves": game.move_count, "az_seconds": round(az_seconds, 4), "az_turns": az_turns, "seed":args.seed, "simulations":args.sims, "board_size":args.size, "opponent":args.opponent, "checkpoint":str(args.checkpoint),"checkpoint_sha256":checkpoint_hash,"trained_iterations":state.get('iteration',-1)+1})
         print(f"game {game_index + 1}/{args.games} winner={outcome} moves={game.move_count}", flush=True)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("w", newline="", encoding="utf-8") as f:
