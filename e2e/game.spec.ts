@@ -18,3 +18,12 @@ test('mobile board is playable without horizontal overflow',async({browser})=>{
   const context=await browser.newContext({viewport:{width:390,height:844},hasTouch:true,isMobile:true});const page=await context.newPage();
   await page.goto('http://127.0.0.1:5173/');await page.getByLabel('대국 방식').selectOption('human-human');await page.getByRole('gridcell',{name:'8행 8열',exact:true}).tap();await expect(page.locator('.stone')).toHaveCount(1);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:'test-results/mobile.png',fullPage:true});await context.close();
 });
+test('15x15 board on a 360px phone: every cell is tappable and nothing overflows',async({browser})=>{
+  const context=await browser.newContext({viewport:{width:360,height:740},hasTouch:true,isMobile:true});const page=await context.newPage();
+  await page.goto('http://127.0.0.1:5173/');await page.getByLabel('대국 방식').selectOption('human-human');
+  const cell=page.getByRole('gridcell',{name:'15행 15열',exact:true});const box=(await cell.boundingBox())!;
+  expect(box.width).toBeGreaterThanOrEqual(18);expect(box.x+box.width).toBeLessThanOrEqual(360);
+  await page.touchscreen.tap(box.x+box.width/2,box.y+box.height/2);await expect(page.getByRole('gridcell',{name:'15행 15열 흑 1수'})).toBeVisible();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+  await context.close();
+});

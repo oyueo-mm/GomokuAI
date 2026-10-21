@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Game } from './engine';
 import { labels, levels } from './ai';
@@ -45,6 +45,8 @@ function App() {
   async function loadLog(file?:File){if(!file)return;try{const text=await file.text();const lines=text.trim().split(/\r?\n/),header=lines.shift()!.split(',');if(!header.includes('policy_loss')||!header.includes('arena_win_rate'))throw Error('학습 log.csv 형식이 아닙니다');const rows=lines.map(line=>Object.fromEntries(line.split(',').map((v,i)=>[header[i],Number(v)])));if(rows.some(r=>!Number.isFinite(r.policy_loss)||!Number.isFinite(r.value_loss)||!Number.isFinite(r.arena_win_rate)))throw Error('유효하지 않은 학습 지표');setLogs(rows);setError('');}catch(e){setError(String(e));}}
   function options(value:Algorithm,set:(v:Algorithm)=>void,name:string){return <label>{name}<select aria-label={name} value={value} disabled={arenaBusy||busy} onChange={e=>{set(e.target.value as Algorithm);setDecision(null);}}>{Object.entries(labels).map(([id,label])=><option key={id} value={id} disabled={id==='alphazero'&&(!model||model.board_size!==game.size)}>{label}{id==='alphazero'&&!model?' · 모델 필요':''}</option>)}</select></label>;}
   const candidates=decision?.candidates??[];const maxVisits=Math.max(1,...candidates.map(c=>c.visits??0));
+  // One pass per render instead of two linear scans per cell (225 cells x up to 225 candidates on 15x15).
+  const candidateRank=useMemo(()=>new Map(candidates.map((c,i)=>[c.action,i])),[decision]);
   const scoreA=results.reduce((s,r)=>s+(r.result==='A'?1:r.result==='draw'?.5:0),0);
   const sideScore=(black:boolean)=>{const rows=results.filter(r=>r.aBlack===black);return rows.length?((rows.reduce((s,r)=>s+(r.result==='A'?1:r.result==='draw'?.5:0),0)/rows.length)*100).toFixed(1)+'%':'?';};
   return <div className="app">
@@ -56,9 +58,9 @@ function App() {
       <section className="board-panel">
         <div className="panel-heading"><div><span className="eyebrow">{tab==='arena'?'LIVE ARENA':'LIVE BOARD'}</span><h2>{game.size} × {game.size} <span>자유형 오목</span></h2></div><span className={'status '+(game.done?'finished':'')} aria-live="polite">{arenaBusy?arenaProgress:game.done?(game.winner?`${game.winner===1?'흑':'백'} 승리`:'무승부'):busy?'AI 생각 중…':`${game.player===1?'흑':'백'} 차례`}</span></div>
         <div className="board-wrap"><div className="board" role="grid" aria-label="오목판" style={{gridTemplateColumns:`repeat(${game.size},1fr)`}}>{game.board.map((p,action)=>{
-          const c=candidates.find(c=>c.action===action),order=game.moves.indexOf(action)+1,last=game.moves.at(-1)===action,win=game.line.includes(action);
-          const intensity=c?(c.visits!==undefined?c.visits/maxVisits:Math.max(.15,1-candidates.indexOf(c)/Math.min(10,candidates.length))):0;
-          return <button key={action} role="gridcell" aria-label={`${Math.floor(action/game.size)+1}행 ${action%game.size+1}열${p?` ${p===1?'흑':'백'} ${order}수`:''}`} aria-disabled={!!p||game.done||isAI||arenaBusy} onClick={()=>{if(!p)play(action);}} className={'cell '+(last?'last ':'')+(win?'winning':'')}><span className="cross"/>{!p&&heat&&c&&<span className="heat" style={{opacity:intensity*.8}}/>}{p!==0&&<span className={`stone ${p===1?'black':'white'}`}>{numbers?order:last?'•':''}</span>}{!p&&heat&&c&&candidates.indexOf(c)<3&&<span className="heat-label">{candidates.indexOf(c)+1}</span>}</button>;
+          const rankIndex=candidateRank.get(action),c=rankIndex===undefined?undefined:candidates[rankIndex],order=game.moves.indexOf(action)+1,last=game.moves.at(-1)===action,win=game.line.includes(action);
+          const intensity=c?(c.visits!==undefined?c.visits/maxVisits:Math.max(.15,1-rankIndex!/Math.min(10,candidates.length))):0;
+          return <button key={action} role="gridcell" aria-label={`${Math.floor(action/game.size)+1}행 ${action%game.size+1}열${p?` ${p===1?'흑':'백'} ${order}수`:''}`} aria-disabled={!!p||game.done||isAI||arenaBusy} onClick={()=>{if(!p)play(action);}} className={'cell '+(last?'last ':'')+(win?'winning':'')}><span className="cross"/>{!p&&heat&&c&&<span className="heat" style={{opacity:intensity*.8}}/>}{p!==0&&<span className={`stone ${p===1?'black':'white'}`}>{numbers?order:last?'•':''}</span>}{!p&&heat&&c&&rankIndex!<3&&<span className="heat-label">{rankIndex!+1}</span>}</button>;
         })}</div></div>
         <div className="board-footer"><span><i className="dot black"/> 흑 선공 <span className="separator">/</span> {game.moves.length}수</span><div><label><input type="checkbox" checked={numbers} onChange={e=>setNumbers(e.target.checked)}/> 수순</label><label><input type="checkbox" checked={heat} onChange={e=>setHeat(e.target.checked)}/> 후보 히트맵</label></div></div>
         <div className="toolbar"><button disabled={!game.moves.length||arenaBusy} onClick={()=>{void cancel();setGame(game.undo(mode==='human-ai'&&game.moves.length>1&&!isAI?2:1));setRunning(false);}}>↶ 무르기</button><button disabled={arenaBusy} onClick={()=>restart()}>↻ 새 대국</button><button disabled={arenaBusy||loadingModel} onClick={()=>{if(running){setRunning(false);void cancel();}else setRunning(true);}}>{running?'Ⅱ 일시정지':'▷ 계속'}</button><button onClick={()=>download('gomoku-record.json',JSON.stringify(game.record(),null,2))}>기보 저장 ↓</button><label className="file-button">기보 불러오기<input type="file" accept=".json" disabled={arenaBusy} onChange={e=>{void loadRecord(e.target.files?.[0]);e.target.value='';}}/></label></div>

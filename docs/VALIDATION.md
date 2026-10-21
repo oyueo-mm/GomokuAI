@@ -70,3 +70,37 @@ npm run test:pages
 브라우저 재측정은 `test-results/benchmark.json`에 쓰므로 버전 관리한 측정 스냅샷을 덮어쓰지 않는다. 실제 손실 로그와 실행 설정 사본은 `demo_results/verified_training_log.csv`, `verified_training_run.json`에 보존했다.
 
 남은 검증은 Colab GPU 실행·성능, 충분한 학습 후 다중 시드·다양한 상대 평가, 저사양 모바일 실기기다. GitHub Actions/Pages 설정 파일은 준비했으며 원격 CI 실행·공개 배포는 하지 않았다.
+
+## 후속 개선 · 2026-10-22 (revival/web-ai-lab)
+
+### 수정한 오류
+
+- AlphaZero 학습률 감쇠가 학습 **후**에 적용되어 모든 마일스톤이 한 iteration씩 늦게 작동했다. 해당 iteration 학습 전에 적용하도록 수정하고 회귀 테스트를 추가했다.
+- `scripts/export_model.py`와 `scripts/evaluate_checkpoint.py`가 `latest.pt`에서 승급 게이트를 통과하지 않은 **후보** 가중치(`model_state`)를 내보내고 평가했다. 자기대국과 승급 기준은 `best_model_state`이므로 기본값을 게이트 통과 최고 모델로 바꾸고 `--weights candidate`로 후보를 명시 선택하게 했다. 메타데이터·CSV에 사용한 가중치 출처(`weights`)를 기록한다. 이미 내보낸 모델 파일은 건드리지 않았다.
+- Minimax/Alpha-Beta의 리프 평가가 "가장 높은 단일 위협 − 상대 위협"이라 상대의 막을 수 있는 4목도 치명적으로 계산했고, 겹치는 위협은 무시했다. 상위 3개 위협의 가중 합과 막을 수 없는 이중 승리 위협 판정으로 교체했다. 13×13 표준 예산에서 이전 Alpha-Beta는 Heuristic에 0승 5패 1무였다.
+- AI 워커가 비정상 종료하면 이후 요청이 응답 없이 멈췄다. 다음 요청에서 워커와 모델을 다시 만든다.
+
+### 효율 개선
+
+- 위협 점수 계산(`threat`)은 원래 구현과 무작위 국면 120개에서 점수·후보 순서가 동일함을 테스트로 고정한 채 약 2배 빨라졌다.
+- Alpha-Beta 루트에 알파 창을 적용했다. 루트의 비최선 수는 경계값을 반환하므로 선택은 처음 엄격히 개선한 수로 고정한다.
+- MCTS: 휴리스틱 순위를 선택 사전확률(PUCT)로 쓰고, 방문 전 자식은 보드를 복제하지 않으며(AlphaZero 확장 때 최대 size² 복제 제거), 롤아웃은 6수로 줄였다. 후보 히트맵 조회는 셀마다 선형 탐색하던 것을 한 번의 Map으로 바꿨다.
+
+### 실제 대국 (`scripts/ts/arena.ts`)
+
+13×13, 표준 예산(깊이 2 / 후보 10 / 128 시뮬레이션), 시간 제한 없이 결정적 예산만 사용. 쌍마다 무작위 2수 시작 국면을 흑백 교대로 두 번 두었다(6쌍 = 12대국). A = 개선본(`cur`), B = 개선 전 코드(`old`, `scripts/ts/baseline_ai.ts`).
+
+| A : B | A 승 | A 패 | 무 | 수당 시간 A / B |
+|---|---|---|---|---|
+| Alpha-Beta : 이전 Alpha-Beta | 10 | 2 | 0 | 8.6 / 38.3 ms |
+| Minimax : 이전 Minimax | 10 | 2 | 0 | 17.8 / 37.5 ms |
+| MCTS : 이전 MCTS | 9 | 3 | 0 | 169 / 615 ms |
+| Alpha-Beta : Heuristic | 3 | 2 | 7 | 10.2 / 0.4 ms |
+| MCTS : Heuristic | 7 | 0 | 5 | 182 / 0.4 ms |
+| MCTS : Alpha-Beta | 6 | 3 | 3 | 177 / 8.5 ms |
+
+12대국 표본이므로 개선 전 대비 향상은 뚜렷하나 세부 순위는 입증하지 않는다. Alpha-Beta는 Heuristic과 대등한 수준(3승 2패 7무)이며 압도하지 못한다. 재현: `npx vite-node scripts/ts/arena.ts -- 13 normal 6 cur/mcts:old/heuristic`.
+
+### 검사 결과
+
+pytest 69, Vitest 49(위협 점수 동일성·워커 복구·전술·결정성·시뮬레이션 예산 추가), Playwright 8(360px 폰의 15×15 탭 테스트 추가) 통과. GPU 학습은 실행하지 않았다. 파이프라인·체크포인트·기존 학습 결과는 변경하지 않았다. 저사양 실기기·Safari·Firefox는 여전히 미검증이다.
