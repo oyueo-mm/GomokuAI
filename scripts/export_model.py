@@ -10,11 +10,12 @@ import json
 from pathlib import Path
 import numpy as np
 import torch
+from alphazero.checkpoint import select_weights
 from alphazero.config import AlphaZeroConfig
 from alphazero.model import GomokuNet
 
 
-def export(checkpoint: Path, output: Path, config_path=None, status='smoke'):
+def export(checkpoint: Path, output: Path, config_path=None, status='smoke', weights='best'):
     import onnxruntime as ort
     saved = torch.load(checkpoint, map_location='cpu', weights_only=True)
     config_data = saved.get('config') if isinstance(saved, dict) else None
@@ -24,7 +25,8 @@ def export(checkpoint: Path, output: Path, config_path=None, status='smoke'):
         raise ValueError('Legacy weights require --config JSON with architecture and rules')
     config = AlphaZeroConfig(**config_data)
     model = GomokuNet(config).eval()
-    model.load_state_dict(saved.get('model_state', saved))
+    state, weights_source = select_weights(saved, weights)
+    model.load_state_dict(state)
     if config.board_size not in (9, 13, 15) or config.win_length != 5:
         raise ValueError('Web model requires 9/13/15 board and win_length=5')
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -46,7 +48,7 @@ def export(checkpoint: Path, output: Path, config_path=None, status='smoke'):
             np.testing.assert_allclose(a, b.numpy(), atol=1e-5, rtol=1e-4)
             max_error = max(max_error, float(np.max(np.abs(a-b.numpy()))))
     iterations = int(saved.get('iteration', -1)) + 1
-    metadata = dict(version=1, board_size=config.board_size, win_length=config.win_length, trained_iterations=iterations, status=status, sha256=hashlib.sha256(output.read_bytes()).hexdigest(), name=output.stem, config=asdict(config), parity_max_absolute_error=max_error, strength='unverified')
+    metadata = dict(version=1, board_size=config.board_size, win_length=config.win_length, trained_iterations=iterations, status=status, sha256=hashlib.sha256(output.read_bytes()).hexdigest(), name=output.stem, config=asdict(config), parity_max_absolute_error=max_error, strength='unverified', weights=weights_source)
     output.with_suffix('.json').write_text(json.dumps(metadata, indent=2), encoding='utf-8')
     # A real input and PyTorch outputs for browser WASM parity verification.
     fixture = dict(states=data[:1].reshape(-1).tolist(), logits=expected[0][0].tolist(), value=float(expected[1][0]))
@@ -61,8 +63,9 @@ def main():
     p.add_argument('--output',type=Path,required=True)
     p.add_argument('--config',type=Path)
     p.add_argument('--status',choices=['smoke','trained'],default='smoke')
+    p.add_argument('--weights',choices=['best','candidate'],default='best',help='latest.pt: arena-gated best net (default) or unpromoted candidate')
     args=p.parse_args()
-    export(args.checkpoint,args.output,args.config,args.status)
+    export(args.checkpoint,args.output,args.config,args.status,args.weights)
 
 
 if __name__=='__main__':

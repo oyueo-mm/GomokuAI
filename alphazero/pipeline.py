@@ -133,10 +133,11 @@ def run_training_loop(config: AlphaZeroConfig, resume: bool = True):
         inference_batches = best_evaluator.batches - batches_before
         inference_positions = best_evaluator.positions - positions_before
 
+        # The decay for this iteration must be in effect before it trains
+        # (applying it afterwards delayed every milestone by one iteration).
+        _apply_lr_schedule(optimizer, config, iteration)
         losses = train_steps(model, optimizer, buffer, config, device)
         t_train = time.time() - t0 - t_selfplay
-
-        _apply_lr_schedule(optimizer, config, iteration)
 
         win_rate = play_match(candidate_evaluator, best_evaluator, config, rng)
         promoted = win_rate >= config.arena_win_rate_threshold

@@ -13,6 +13,7 @@ from time import perf_counter
 
 import numpy as np
 
+from alphazero.checkpoint import select_weights
 from gomoku_env.game import BLACK, GomokuGame
 from gomoku_env.search_agents import choose_action
 
@@ -27,6 +28,7 @@ def main():
     parser.add_argument("--sims", type=int, default=32)
     parser.add_argument("--games", type=int, default=4)
     parser.add_argument("--opponent", choices=("random", "tactical", "alphabeta"), default="tactical")
+    parser.add_argument("--weights", choices=("best", "candidate"), default="best", help="for latest.pt snapshots: arena-gated best net (default) or the unpromoted candidate")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output", type=Path, default=Path("results/alphazero_vs_baseline.csv"))
     args = parser.parse_args()
@@ -50,7 +52,8 @@ def main():
         config = AlphaZeroConfig(**{**state['config'], 'num_simulations': args.sims, 'sim_batch':min(args.sims,4)})
         args.size, args.win_length = config.board_size, config.win_length
     model = GomokuNet(config)
-    model.load_state_dict(state.get('model_state',state))
+    weights, weights_source = select_weights(state, args.weights)
+    model.load_state_dict(weights)
     evaluator = NetEvaluator(model, device="cuda" if torch.cuda.is_available() else "cpu")
     rng = np.random.default_rng(args.seed)
     records = []
@@ -73,7 +76,7 @@ def main():
                 raise RuntimeError(f"Illegal move: {action}")
             game.step(action)
         outcome = "draw" if game.winner is None else ("alphazero" if game.winner == az_color else args.opponent)
-        records.append({"game": game_index + 1, "az_color": "black" if az_color == BLACK else "white", "winner": outcome, "moves": game.move_count, "az_seconds": round(az_seconds, 4), "az_turns": az_turns, "seed":args.seed, "simulations":args.sims, "board_size":args.size, "opponent":args.opponent, "checkpoint":str(args.checkpoint),"checkpoint_sha256":checkpoint_hash,"trained_iterations":state.get('iteration',-1)+1})
+        records.append({"game": game_index + 1, "az_color": "black" if az_color == BLACK else "white", "winner": outcome, "moves": game.move_count, "az_seconds": round(az_seconds, 4), "az_turns": az_turns, "seed":args.seed, "simulations":args.sims, "board_size":args.size, "opponent":args.opponent, "checkpoint":str(args.checkpoint),"checkpoint_sha256":checkpoint_hash,"weights":weights_source,"trained_iterations":state.get('iteration',-1)+1})
         print(f"game {game_index + 1}/{args.games} winner={outcome} moves={game.move_count}", flush=True)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("w", newline="", encoding="utf-8") as f:
